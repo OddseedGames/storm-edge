@@ -12,7 +12,7 @@ else
 fi
 task_build_dir=$(mktemp -d "${TMPDIR:-/tmp}/storm-edge-web.XXXXXX")
 trap 'rm -rf "$task_build_dir"' EXIT HUP INT TERM
-"$task_bindgen" --target web --out-dir "$task_build_dir" --out-name storm-edge target/wasm32-unknown-unknown/web/storm-edge.wasm
+"$task_bindgen" --target web --remove-name-section --out-dir "$task_build_dir" --out-name storm-edge target/wasm32-unknown-unknown/web/storm-edge.wasm
 python3 scripts/package-web.py "$task_build_dir"
 python3 scripts/verify-web.py "$task_build_dir"
 rm -rf dist
