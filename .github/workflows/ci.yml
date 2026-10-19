@@ -1,0 +1,116 @@
+name: CI and Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_BUILD_JOBS: 2
+  CARGO_TERM_COLOR: always
+
+jobs:
+  checks:
+    name: Rust / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Install Linux libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev libudev-dev libx11-dev libxkbcommon-dev libxi-dev clang lld
+      - name: Cache Rust dependencies
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/ci
+          key: native-v1-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'Cargo.toml') }}
+          restore-keys: native-v1-${{ runner.os }}-
+      - name: Install pinned Rust toolchain
+        run: rustc --version
+      - name: Check formatting
+        run: cargo fmt --all --check
+      - name: Test game logic on Linux
+        if: runner.os == 'Linux'
+        env:
+          RUSTFLAGS: -C link-arg=-fuse-ld=lld
+        run: cargo test --profile ci --all-targets --locked
+      - name: Test game logic on Windows
+        if: runner.os == 'Windows'
+        run: cargo test --profile ci --all-targets --locked
+
+  web:
+    name: WASM / package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Cache Rust dependencies
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/wasm32-unknown-unknown/web
+            target/web
+          key: web-v1-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'Cargo.toml') }}
+          restore-keys: web-v1-${{ runner.os }}-
+      - name: Install pinned wasm-bindgen
+        env:
+          BINDGEN_ARCHIVE: wasm-bindgen-0.2.129-x86_64-unknown-linux-musl
+        run: |
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/$BINDGEN_ARCHIVE.tar.gz" "https://github.com/wasm-bindgen/wasm-bindgen/releases/download/0.2.129/$BINDGEN_ARCHIVE.tar.gz"
+          cd "$RUNNER_TEMP"
+          echo "82d12bb940e2d4e72e0d5605387fc1b8ca179044e012b620f0ce4e7440e8320e  $BINDGEN_ARCHIVE.tar.gz" | sha256sum --check
+          tar -xzf "$BINDGEN_ARCHIVE.tar.gz"
+          echo "$RUNNER_TEMP/$BINDGEN_ARCHIVE" >> "$GITHUB_PATH"
+      - name: Build and verify versioned web package
+        run: sh scripts/build-web.sh
+      - name: Upload playable web build
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: storm-edge-web
+          path: dist/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Pages site
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+
+  deploy:
+    name: Publish GitHub Pages
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [checks, web]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - name: Deploy site
+        id: deployment
+        uses: actions/deploy-pages@v4

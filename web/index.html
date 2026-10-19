@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#183b40">
+  <meta name="build" content="__BUILD_VERSION__">
+  <title>Кромка бури · Oddseed Games</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23183b40'/%3E%3Cpath d='M8 42L32 12l24 30-24-9z' fill='%23e3b967'/%3E%3C/svg%3E">
+  <style>
+    *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#183b40;color:#eee4c5;font:14px system-ui,sans-serif}main{width:100%;height:100%}canvas{width:100%!important;height:100%!important;display:block;outline:none;touch-action:none}#loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 70% 35%,#426d71,#102c34);z-index:10;transition:opacity .6s}#loading>div{max-width:620px;padding:36px;text-align:center}h1{font-size:50px;font-weight:400;letter-spacing:.09em;margin:20px 0}.label{font-size:11px;letter-spacing:.4em;color:#d9ae66}.line{height:1px;width:180px;margin:24px auto;background:#8ba8a0;overflow:hidden}.line:before{content:"";display:block;width:70px;height:1px;background:#ffe3a8;animation:travel 1.3s infinite ease-in-out}p{line-height:1.8;color:#b8ccc6}#error{color:#eccdb6;white-space:pre-wrap;font-size:13px}#game-status{display:none}@keyframes travel{from{transform:translateX(-70px)}to{transform:translateX(180px)}}
+  </style>
+</head>
+<body>
+  <main><canvas id="game" data-assets="assets-__ASSET_VERSION__" tabindex="0" aria-label="Кромка бури — трёхмерный полёт на катере"></canvas></main>
+  <div id="loading"><div><div class="label">ODDSEED GAMES / 05</div><h1>КРОМКА БУРИ</h1><div class="line"></div><p id="loading-text">Поднимаем острова над облаками…<br>Rust + Bevy · WebGPU</p><div id="error"></div></div></div>
+  <output id="game-status" data-ready="false"></output>
+  <script type="module">
+    const loading=document.querySelector('#loading');
+    const status=document.querySelector('#game-status');
+    const fail=error=>{loading.style.opacity='1';loading.style.display='flex';document.querySelector('#loading-text').textContent='Не удалось запустить рендер. Открой игру в актуальном Chrome с аппаратным ускорением.';document.querySelector('#error').textContent=String(error?.message??error)};
+    window.addEventListener('error',event=>fail(event.error??event.message));
+    window.addEventListener('unhandledrejection',event=>fail(event.reason));
+    try{
+      if(!navigator.gpu)throw new Error('WebGPU недоступен. Нативная версия запускается через sh scripts/run.sh.');
+      const {default:init}=await import('./storm-edge.js?v=__JS_VERSION__');
+      await init({module_or_path:new URL('./storm-edge_bg.wasm?v=__WASM_VERSION__',import.meta.url)});
+      const observer=new MutationObserver(()=>{
+        if(status.dataset.ready==='true'){
+          loading.style.opacity='0';setTimeout(()=>loading.style.display='none',700);observer.disconnect();
+          document.querySelector('canvas').focus();
+        }
+      });
+      observer.observe(status,{attributes:true});
+      if(status.dataset.ready==='true'){loading.style.display='none';observer.disconnect()}
+    }catch(error){fail(error)}
+  </script>
+</body>
+</html>
